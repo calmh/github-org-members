@@ -1,0 +1,20 @@
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    # First of the month
+    - cron: '0 0 1 * *'
+
+jobs:
+
+  run-recommendation:
+    runs-on: ubuntu-latest
+    name: Run and see if there is a recommendation
+    steps:
+
+      - uses: actions/checkout@v4
+      - uses: docker://docker.io/library/golang:latest
+        with:
+          args: go run . --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_ACCESS_PAT }}

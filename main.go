@@ -17,11 +17,12 @@ import (
 
 type CLI struct {
 	GithubToken      string   `required:"" env:"GITHUB_TOKEN" help:"Github token"`
-	Organisation     string   `default:"syncthing" help:"Organisation name"`
+	Organisation     string   `help:"Organisation name" env:"GITHUB_ORGANISATION"`
 	AddMinCommits    int      `default:"5" help:"Minimum number of commits to be considered active"`
 	AddTimeWindow    int      `default:"1" help:"Time window in years to consider active"`
 	RemoveTimeWindow int      `default:"5" help:"Time window in years to consider inactive"`
-	AlsoRepos        []string `help:"Also consider these repositories" default:"canton7/SyncTrayzor,Martchus/syncthingtray"`
+	AlsoRepos        []string `help:"Also consider these repositories" env:"ALSO_REPOS"`
+	IgnoreUsers      []string `help:"Make no recommendation about these users" env:"IGNORE_USERS"`
 	Verbose          bool
 }
 
@@ -120,6 +121,7 @@ func main() {
 
 	recommendation := false
 	add := interval1Active.Difference(members)
+	add.RemoveAll(cli.IgnoreUsers...)
 	if add.Cardinality() != 0 {
 		recommendation = true
 		fmt.Println("Add the following members:")
@@ -130,6 +132,7 @@ func main() {
 	}
 
 	remove := members.Difference(interval2Active)
+	remove.RemoveAll(cli.IgnoreUsers...)
 	if remove.Cardinality() != 0 {
 		recommendation = true
 		fmt.Println("Remove the following members:")

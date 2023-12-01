@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -41,11 +42,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	members := mapset.NewSet[string]()
-	for _, m := range cur {
-		members.Add(m.GetLogin())
-	}
-
+	members := mapset.NewSet[string](cur...)
 	if cli.Verbose {
 		log.Println("Listing repositories...")
 	}
@@ -147,21 +144,44 @@ func main() {
 	}
 }
 
-func getOrgMembers(client *github.Client, org string) ([]*github.User, error) {
-	var members []*github.User
+func getOrgMembers(client *github.Client, org string) ([]string, error) {
+	var members []string
+
+	// Current org members
 	var opt github.ListMembersOptions
 	opt.PerPage = 100
 	for {
 		user, resp, err := client.Organizations.ListMembers(context.Background(), org, &opt)
-		members = append(members, user...)
+		for _, u := range user {
+			members = append(members, u.GetLogin())
+		}
 		if err != nil {
 			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		}
 		if resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
 	}
+
+	// Current outstanding invitations (we expect these will always fit on a
+	// single page)
+	invs, resp, err := client.Organizations.ListPendingOrgInvitations(context.Background(), org, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	for _, inv := range invs {
+		if login := inv.GetLogin(); login != "" {
+			members = append(members, login)
+		}
+	}
+
 	return members, nil
 }
 

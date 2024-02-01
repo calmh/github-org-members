@@ -20,4 +20,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_ACCESS_PAT }}
           GITHUB_ORGANISATION: syncthing
           ALSO_REPOS: canton7/SyncTrayzor,Martchus/syncthingtray,Bill-Stewart/SyncthingWindowsSetup
-          IGNORE_USERS: st-review,st-release
+          IGNORE_USERS: st-review,st-release,weblate

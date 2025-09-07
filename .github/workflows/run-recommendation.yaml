@@ -19,5 +19,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_ACCESS_PAT }}
           GITHUB_ORGANISATION: syncthing
-          ALSO_REPOS: canton7/SyncTrayzor,GermanCoding/SyncTrayzor,Martchus/syncthingtray,Bill-Stewart/SyncthingWindowsSetup
+          ALSO_REPOS: GermanCoding/SyncTrayzor,Martchus/syncthingtray,Bill-Stewart/SyncthingWindowsSetup,pixelspark/sushitrain
           IGNORE_USERS: st-review,st-release,weblate

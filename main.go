@@ -1,13 +1,16 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/alecthomas/kong"
@@ -42,7 +45,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	members := mapset.NewSet[string](cur...)
+	members := mapset.NewSet(cur...)
 	if cli.Verbose {
 		log.Println("Listing repositories...")
 	}
@@ -100,13 +103,19 @@ func main() {
 		doneWg.Wait()
 		close(results)
 	}()
+
+	intv1Activity := make(map[string]int)
+	intv2Activity := make(map[string]int)
+
 	for coms := range results {
 		for user, count := range coms.interval1 {
+			intv1Activity[user] += count
 			if count >= cli.AddMinCommits {
 				interval1Active.Add(user)
 			}
 		}
-		for user := range coms.interval2 {
+		for user, count := range coms.interval2 {
+			intv2Activity[user] += count
 			interval2Active.Add(user)
 		}
 		for user, date := range coms.lastCommit {
@@ -134,10 +143,36 @@ func main() {
 		recommendation = true
 		fmt.Println("Remove the following members:")
 		remove.Each(func(user string) bool {
-			fmt.Printf("- %s (last commit %s)\n", user, lastCommit[user].Format("2006-01-02"))
+			fmt.Printf("- %s (last commit %s)\n", user, lastCommit[user].Format(time.DateOnly))
 			return false
 		})
 	}
+
+	// Table of users with commits
+	allUsers := members.Union(interval1Active)
+	allUsers.RemoveAll(cli.IgnoreUsers...)
+	us := allUsers.ToSlice()
+	slices.SortFunc(us, func(a, b string) int {
+		return cmp.Or(
+			-cmp.Compare(intv1Activity[a]+intv2Activity[a], intv1Activity[b]+intv2Activity[b]),
+			-cmp.Compare(intv1Activity[a], intv1Activity[b]),
+		)
+	})
+	fmt.Println("---")
+	tw := tabwriter.NewWriter(os.Stdout, 2, 2, 2, ' ', 0)
+	for _, u := range us {
+		r, s := "", ""
+		if intv1Activity[u] >= cli.AddMinCommits {
+			s = "+"
+		} else if intv2Activity[u] >= cli.AddMinCommits {
+			s = "-"
+			r = lastCommit[u].AddDate(cli.RemoveTimeWindow, 0, 0).Format(time.DateOnly)
+		} else {
+			continue
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%s\t%s\n", s, u, intv1Activity[u], intv2Activity[u], lastCommit[u].Format(time.DateOnly), r)
+	}
+	tw.Flush()
 
 	if recommendation {
 		os.Exit(1)

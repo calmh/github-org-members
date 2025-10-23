@@ -21,7 +21,7 @@ import (
 
 type CLI struct {
 	GithubToken      string   `required:"" env:"GITHUB_TOKEN" help:"Github token"`
-	Organisation     string   `help:"Organisation name" env:"GITHUB_ORGANISATION"`
+	Organisation     string   `required:"" help:"Organisation name" env:"GITHUB_ORGANISATION"`
 	AddMinCommits    int      `default:"5" help:"Minimum number of commits to be considered active"`
 	AddTimeWindow    int      `default:"1" help:"Time window in years to consider active"`
 	RemoveTimeWindow int      `default:"5" help:"Time window in years to consider inactive"`
@@ -154,8 +154,8 @@ func main() {
 	us := allUsers.ToSlice()
 	slices.SortFunc(us, func(a, b string) int {
 		return cmp.Or(
-			-cmp.Compare(intv1Activity[a]+intv2Activity[a], intv1Activity[b]+intv2Activity[b]),
 			-cmp.Compare(intv1Activity[a], intv1Activity[b]),
+			-cmp.Compare(intv2Activity[a], intv2Activity[b]),
 		)
 	})
 	fmt.Println("---")
@@ -163,14 +163,14 @@ func main() {
 	for _, u := range us {
 		r, s := "", ""
 		if intv1Activity[u] >= cli.AddMinCommits {
-			s = "+"
+			s = "*"
 		} else if intv2Activity[u] >= cli.AddMinCommits {
-			s = "-"
+			s = "?"
 			r = lastCommit[u].AddDate(cli.RemoveTimeWindow, 0, 0).Format(time.DateOnly)
 		} else {
 			continue
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%s\t%s\n", s, u, intv1Activity[u], intv2Activity[u], lastCommit[u].Format(time.DateOnly), r)
+		fmt.Fprintf(tw, "%s\t%s\t%4d\t%4d\t%s\t%s\n", s, u, intv1Activity[u], intv2Activity[u], lastCommit[u].Format(time.DateOnly), r)
 	}
 	tw.Flush()
 

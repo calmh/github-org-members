@@ -1,0 +1,25 @@
+builds:
+- id: gpsprom
+  main: ./cmd/gpsprom
+  ldflags:
+  - -s -w
+  - -extldflags "-static"
+- id: hanprom
+  main: ./cmd/hanprom
+  ldflags:
+  - -s -w
+  - -extldflags "-static"
+- id: ocppprom
+  main: ./cmd/ocppprom
+  ldflags:
+  - -s -w
+  - -extldflags "-static"
+- id: upsprom
+  main: ./cmd/upsprom
+  ldflags:
+  - -s -w
+  - -extldflags "-static"
+
+defaultPlatforms:
+- linux/arm64
+- linux/amd64

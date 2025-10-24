@@ -22,12 +22,12 @@ import (
 type CLI struct {
 	GithubToken      string   `required:"" env:"GITHUB_TOKEN" help:"Github token"`
 	Organisation     string   `required:"" help:"Organisation name" env:"GITHUB_ORGANISATION"`
-	AddMinCommits    int      `default:"5" help:"Minimum number of commits to be considered active"`
-	AddTimeWindow    int      `default:"1" help:"Time window in years to consider active"`
-	RemoveTimeWindow int      `default:"5" help:"Time window in years to consider inactive"`
-	AlsoRepos        []string `help:"Also consider these repositories" env:"ALSO_REPOS"`
-	IgnoreUsers      []string `help:"Make no recommendation about these users" env:"IGNORE_USERS"`
-	Verbose          bool
+	AddMinCommits    int      `default:"5" help:"Minimum number of commits to be considered active" env:"GOM_ADD_MIN_COMMITS"`
+	AddTimeWindow    int      `default:"1" help:"Time window in years to consider active" env:"GOM_ADD_TIME_WINDOW"`
+	RemoveTimeWindow int      `default:"5" help:"Time window in years to consider inactive" env:"GOM_REMOVE_TIME_WINDOW"`
+	AlsoRepos        []string `help:"Also consider these repositories" env:"GOM_ALSO_REPOS"`
+	IgnoreUsers      []string `help:"Make no recommendation about these users" env:"GOM_IGNORE_USERS"`
+	Verbose          bool     `help:"Show what's going on" env:"GOM_VERBOSE"`
 }
 
 func main() {

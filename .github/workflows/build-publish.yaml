@@ -1,0 +1,40 @@
+name: Build and Publish
+
+on:
+  push:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # define job to build and publish docker image
+  build-and-push-docker-image:
+    name: Build Docker image and push to repositories
+    runs-on: ubuntu-latest
+
+    # steps to perform in job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 'stable'
+
+      - name: Setup ko
+        uses: ko-build/setup-ko@v0.6
+
+      - name: Login to Github Packages
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build containers
+        run: |
+          ko build --bare -t latest -t $GITHUB_RUN_NUMBER .
+        env:
+          KO_DOCKER_REPO: ghcr.io/calmh/github-org-members

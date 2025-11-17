@@ -30,6 +30,12 @@ type CLI struct {
 	Verbose          bool     `help:"Show what's going on" env:"GOM_VERBOSE"`
 }
 
+type member struct {
+	login     string
+	orgAdmin  bool
+	repoAdmin bool
+}
+
 func main() {
 	var cli CLI
 	kong.Parse(&cli)
@@ -45,7 +51,17 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	members := mapset.NewSet(cur...)
+	memberLookup := make(map[string]member)
+	memberLogins := make([]string, len(cur))
+	admins := mapset.NewSet[string]()
+	for i, m := range cur {
+		memberLookup[m.login] = m
+		memberLogins[i] = m.login
+		if m.orgAdmin {
+			admins.Add(m.login)
+		}
+	}
+	members := mapset.NewSet(memberLogins...)
 	if cli.Verbose {
 		log.Println("Listing repositories...")
 	}
@@ -138,7 +154,30 @@ func main() {
 	}
 
 	remove := members.Difference(interval2Active)
+	remove = remove.Difference(admins)
 	remove.RemoveAll(cli.IgnoreUsers...)
+
+	// See if any are repo admins...
+nextUser:
+	for user, cur := range memberLookup {
+		if cur.orgAdmin || cur.repoAdmin {
+			continue
+		}
+		for _, repo := range repos {
+			perm, _, err := client.Repositories.GetPermissionLevel(context.Background(), cli.Organisation, repo, user)
+			if err != nil {
+				fmt.Println("Couldn't get permission level:", err)
+				os.Exit(1)
+			}
+			if perm.GetPermission() == "admin" {
+				cur.repoAdmin = true
+				memberLookup[user] = cur
+				remove.Remove(user)
+				continue nextUser
+			}
+		}
+	}
+
 	if remove.Cardinality() != 0 {
 		recommendation = true
 		fmt.Println("Remove the following members:")
@@ -158,14 +197,19 @@ func main() {
 			-cmp.Compare(intv2Activity[a], intv2Activity[b]),
 		)
 	})
+
 	fmt.Println("---")
 	tw := tabwriter.NewWriter(os.Stdout, 2, 2, 2, ' ', 0)
 	for _, u := range us {
 		r, s := "", ""
-		if intv1Activity[u] >= cli.AddMinCommits {
-			s = "*"
+		if memberLookup[u].orgAdmin {
+			s = "O"
+		} else if memberLookup[u].repoAdmin {
+			s = "R"
+		} else if intv1Activity[u] >= cli.AddMinCommits {
+			s = "*" // active in the last interval (1y)
 		} else if intv2Activity[u] >= cli.AddMinCommits {
-			s = "?"
+			s = "?" // active in the long interval (5y)
 			r = lastCommit[u].AddDate(cli.RemoveTimeWindow, 0, 0).Format(time.DateOnly)
 		} else {
 			continue
@@ -179,8 +223,8 @@ func main() {
 	}
 }
 
-func getOrgMembers(client *github.Client, org string) ([]string, error) {
-	var members []string
+func getOrgMembers(client *github.Client, org string) ([]member, error) {
+	var members []member
 
 	// Current org members
 	var opt github.ListMembersOptions
@@ -188,7 +232,11 @@ func getOrgMembers(client *github.Client, org string) ([]string, error) {
 	for {
 		user, resp, err := client.Organizations.ListMembers(context.Background(), org, &opt)
 		for _, u := range user {
-			members = append(members, u.GetLogin())
+			m, _, err := client.Organizations.GetOrgMembership(context.Background(), u.GetLogin(), org)
+			if err != nil {
+				return nil, err
+			}
+			members = append(members, member{login: u.GetLogin(), orgAdmin: m.GetRole() == "admin"})
 		}
 		if err != nil {
 			return nil, err
@@ -213,7 +261,7 @@ func getOrgMembers(client *github.Client, org string) ([]string, error) {
 	}
 	for _, inv := range invs {
 		if login := inv.GetLogin(); login != "" {
-			members = append(members, login)
+			members = append(members, member{login: login})
 		}
 	}
 

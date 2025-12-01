@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"slices"
@@ -16,6 +16,7 @@ import (
 	"github.com/alecthomas/kong"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/go-github/github"
+	"github.com/lmittmann/tint"
 	"golang.org/x/oauth2"
 )
 
@@ -43,12 +44,22 @@ func main() {
 	tc := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cli.GithubToken}))
 	client := github.NewClient(tc)
 
+	level := slog.LevelInfo
 	if cli.Verbose {
-		log.Println("Listing current members...")
+		level = slog.LevelDebug
 	}
+
+	slog.SetDefault(slog.New(
+		tint.NewHandler(os.Stdout, &tint.Options{
+			Level:      level,
+			TimeFormat: time.DateTime,
+		}),
+	))
+
+	slog.Debug("Listing current members...")
 	cur, err := getOrgMembers(client, cli.Organisation)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("Failed to list members", "error", err)
 		os.Exit(1)
 	}
 	memberLookup := make(map[string]member)
@@ -62,12 +73,10 @@ func main() {
 		}
 	}
 	members := mapset.NewSet(memberLogins...)
-	if cli.Verbose {
-		log.Println("Listing repositories...")
-	}
+	slog.Debug("Listing repositories...")
 	repos, err := getRepositoriesByOrg(client, cli.Organisation)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("Failed to list repositories", "error", err)
 		os.Exit(1)
 	}
 
@@ -85,12 +94,10 @@ func main() {
 	results := make(chan *comitters)
 	var doneWg sync.WaitGroup
 	processRepo := func(owner, repo string) {
-		if cli.Verbose {
-			log.Printf("Listing %s/%s commits...", owner, repo)
-		}
+		slog.Debug("Listing commits...", "owner", owner, "repo", repo)
 		coms, err := getRepoCommiters(client, owner, repo, cutoff1, cutoff2)
 		if err != nil {
-			fmt.Println(err)
+			slog.Error("Failed to list commits", "owner", owner, "repo", repo, "error", err)
 			os.Exit(1)
 		}
 		results <- coms
@@ -98,7 +105,7 @@ func main() {
 	for _, also := range cli.AlsoRepos {
 		owner, repo, ok := strings.Cut(also, "/")
 		if !ok {
-			fmt.Println("Invalid repository name:", also)
+			slog.Error("Invalid repository name", "name", also)
 			os.Exit(1)
 		}
 		doneWg.Add(1)
@@ -158,6 +165,7 @@ func main() {
 	remove.RemoveAll(cli.IgnoreUsers...)
 
 	// See if any are repo admins...
+	slog.Debug("Checking user permissions...")
 nextUser:
 	for user, cur := range memberLookup {
 		if cur.orgAdmin || cur.repoAdmin {
@@ -166,8 +174,8 @@ nextUser:
 		for _, repo := range repos {
 			perm, _, err := client.Repositories.GetPermissionLevel(context.Background(), cli.Organisation, repo, user)
 			if err != nil {
-				fmt.Println("Couldn't get permission level:", err)
-				os.Exit(1)
+				slog.Warn("Couldn't get permission level", "user", user, "repo", repo, "error", err)
+				continue nextUser
 			}
 			if perm.GetPermission() == "admin" {
 				cur.repoAdmin = true
@@ -214,9 +222,9 @@ nextUser:
 		} else {
 			continue
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%4d\t%4d\t%s\t%s\n", s, u, intv1Activity[u], intv2Activity[u], lastCommit[u].Format(time.DateOnly), r)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%4d\t%4d\t%s\t%s\n", s, u, intv1Activity[u], intv2Activity[u], lastCommit[u].Format(time.DateOnly), r)
 	}
-	tw.Flush()
+	_ = tw.Flush()
 
 	if recommendation {
 		os.Exit(1)
@@ -285,7 +293,7 @@ func getRepoCommiters(client *github.Client, org, repo string, cutoff1, cutoff2 
 	for {
 		commit, resp, err := client.Repositories.ListCommits(context.Background(), org, repo, &opt)
 		if err != nil {
-			fmt.Println(err)
+			slog.Error("Failed to list commits", "owner", org, "repo", repo, "error", err)
 			os.Exit(1)
 		}
 		for _, c := range commit {
